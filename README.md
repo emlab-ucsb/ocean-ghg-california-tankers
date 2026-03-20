@@ -193,7 +193,7 @@ Key packages used in the analysis:
 | [scales](https://scales.r-lib.org/) | Number formatting |
 | [countrycode](https://vincentarelbundock.github.io/countrycode/) | Country code/name conversion |
 | [sf](https://r-spatial.github.io/sf/) | Spatial data and mapping |
-| [rnaturalearth](https://docs.ropensci.org/rnaturalearth/) | Natural Earth map data |
+| [maps](https://cran.r-project.org/web/packages/maps/index.html) | Map data |
 | [bigrquery](https://bigrquery.r-dbi.org/) | Google BigQuery interface (data pull only) |
 | [here](https://here.r-lib.org/) | Reproducible file paths |
 | [knitr](https://yihui.org/knitr/) | Table rendering |

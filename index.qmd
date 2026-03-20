@@ -285,11 +285,13 @@ Next we look at a map of the California arrival ports, and how much CO2 emission
 #| fig-cap: "Map of California arrival ports for chemical and oil tanker voyages from South Korea and India that end at California ports. The point at each point is sized according to how much CO2 emissions occurred on trips from South Korea and India that ended in this port. This aggregates activity from the entire time period of the dataset (January 2015 through February 2026)."
 #| fig-height: 10
 
-california_land_mass <- rnaturalearth::ne_states(
-  country = "United States of America",
-  returnclass = "sf"
+california_land_mass <- maps::map(
+  "state",
+  "california",
+  plot = FALSE,
+  fill = TRUE
 ) |>
-  dplyr::filter(name == "California") |>
+  sf::st_as_sf() |>
   sf::st_transform(crs = 3310)
 
 ggplot() +
