@@ -582,20 +582,23 @@ Figure&nbsp;5: Annual number of tanker trips, unique tanker vessels, CO2 emissio
 </div>
 </div>
 <p>Here we summarize this annual data in a table</p>
-<div class="cell" data-table-cap="Annual number of tanker trips, unique tanker vessels, CO2 emissions, total hours at sea, and total distance traveled (nm), for chemical and oil tanker voyages from South Korea and India that end at California ports.">
+<div class="cell">
 <details class="code-fold">
 <summary>Show code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>annual_summary_data <span class="sc">|&gt;</span></span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">mutate</span>(<span class="at">value =</span> <span class="fu">round</span>(value) <span class="sc">|&gt;</span> <span class="fu">prettyNum</span>(<span class="at">big.mark =</span> <span class="st">","</span>)) <span class="sc">|&gt;</span></span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  tidyr<span class="sc">::</span><span class="fu">pivot_wider</span>(<span class="at">names_from =</span> metric, <span class="at">values_from =</span> value) <span class="sc">|&gt;</span></span>
 <span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">arrange</span>(from_country, year) <span class="sc">|&gt;</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>(</span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">caption =</span> <span class="st">"Annual number of tanker trips, unique tanker vessels, CO2 emissions, total hours at sea, and total distance traveled (nm), for chemical and oil tanker voyages from South Korea and India that end at California ports."</span></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
+<div id="tbl-time-series" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-time-series-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;1: Annual number of tanker trips, unique tanker vessels, CO2 emissions, total hours at sea, and total distance traveled (nm), for chemical and oil tanker voyages from South Korea and India that end at California ports.
+</figcaption>
+<div aria-describedby="tbl-time-series-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <div class="cell-output-display">
-<table class="caption-top table table-sm table-striped small">
-<caption>Annual number of tanker trips, unique tanker vessels, CO2 emissions, total hours at sea, and total distance traveled (nm), for chemical and oil tanker voyages from South Korea and India that end at California ports.</caption>
+<table class="do-not-create-environment cell caption-top table table-sm table-striped small">
 <colgroup>
 <col style="width: 4%">
 <col style="width: 11%">
@@ -736,6 +739,9 @@ Figure&nbsp;5: Annual number of tanker trips, unique tanker vessels, CO2 emissio
 </tr>
 </tbody>
 </table>
+</div>
+</div>
+</figure>
 </div>
 </div>
 
@@ -1579,17 +1585,15 @@ Figure&nbsp;5: Annual number of tanker trips, unique tanker vessels, CO2 emissio
 <span id="cb11-401"><a href="#cb11-401" aria-hidden="true" tabindex="-1"></a>Here we summarize this annual data in a table</span>
 <span id="cb11-402"><a href="#cb11-402" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb11-405"><a href="#cb11-405" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb11-406"><a href="#cb11-406" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: table-time-series</span></span>
-<span id="cb11-407"><a href="#cb11-407" aria-hidden="true" tabindex="-1"></a><span class="co">#| table-cap: "Annual number of tanker trips, unique tanker vessels, CO2 emissions, total hours at sea, and total distance traveled (nm), for chemical and oil tanker voyages from South Korea and India that end at California ports."</span></span>
+<span id="cb11-406"><a href="#cb11-406" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: tbl-time-series</span></span>
+<span id="cb11-407"><a href="#cb11-407" aria-hidden="true" tabindex="-1"></a><span class="co">#| tbl-cap: "Annual number of tanker trips, unique tanker vessels, CO2 emissions, total hours at sea, and total distance traveled (nm), for chemical and oil tanker voyages from South Korea and India that end at California ports."</span></span>
 <span id="cb11-408"><a href="#cb11-408" aria-hidden="true" tabindex="-1"></a>annual_summary_data <span class="sc">|&gt;</span></span>
 <span id="cb11-409"><a href="#cb11-409" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">mutate</span>(<span class="at">value =</span> <span class="fu">round</span>(value) <span class="sc">|&gt;</span> <span class="fu">prettyNum</span>(<span class="at">big.mark =</span> <span class="st">","</span>)) <span class="sc">|&gt;</span></span>
 <span id="cb11-410"><a href="#cb11-410" aria-hidden="true" tabindex="-1"></a>  tidyr<span class="sc">::</span><span class="fu">pivot_wider</span>(<span class="at">names_from =</span> metric, <span class="at">values_from =</span> value) <span class="sc">|&gt;</span></span>
 <span id="cb11-411"><a href="#cb11-411" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">arrange</span>(from_country, year) <span class="sc">|&gt;</span></span>
-<span id="cb11-412"><a href="#cb11-412" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>(</span>
-<span id="cb11-413"><a href="#cb11-413" aria-hidden="true" tabindex="-1"></a>    <span class="at">caption =</span> <span class="st">"Annual number of tanker trips, unique tanker vessels, CO2 emissions, total hours at sea, and total distance traveled (nm), for chemical and oil tanker voyages from South Korea and India that end at California ports."</span></span>
-<span id="cb11-414"><a href="#cb11-414" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb11-415"><a href="#cb11-415" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-416"><a href="#cb11-416" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb11-412"><a href="#cb11-412" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span>
+<span id="cb11-413"><a href="#cb11-413" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-414"><a href="#cb11-414" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 </code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
