@@ -382,7 +382,7 @@ Here we summarize this annual data in a table
 
 ```{r}
 #| label: table-time-series
-
+#| table-cap: "Annual number of tanker trips, unique tanker vessels, CO2 emissions, total hours at sea, and total distance traveled (nm), for chemical and oil tanker voyages from South Korea and India that end at California ports."
 annual_summary_data |>
   dplyr::mutate(value = round(value) |> prettyNum(big.mark = ",")) |>
   tidyr::pivot_wider(names_from = metric, values_from = value) |>
