@@ -4,10 +4,6 @@
 *_cache/
 /cache/
 
-# Local Quarto render output (GitHub Pages is deployed via gh-pages branch
-# by GitHub Actions — see .github/workflows/publish.yml)
-docs/
-
 # ─── R ────────────────────────────────────────────────────────────────────────
 # History files
 .Rhistory
