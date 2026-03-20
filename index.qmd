@@ -83,10 +83,39 @@ Here we load the tanker trip emissions data from the CSV file into R for analysi
 ```{r}
 #| label: load-data
 
+countries_of_interest <- c("South Korea", "India")
+vessel_class_of_interest <- "tanker.chemical_oil"
+
+
 tanker_trip_emissions_ending_in_california <- readr::read_csv(
   here::here(params$data_file)
-)
+) |>
+  dplyr::mutate(
+    class_of_interest = ifelse(
+      vessel_class == "tanker.chemical_oil",
+      TRUE,
+      FALSE
+    )
+  ) |>
+  dplyr::mutate(
+    from_country = countrycode::countrycode(
+      from_country_iso3,
+      "iso3c",
+      "country.name",
+      nomatch = from_country_iso3
+    )
+  ) |>
+  dplyr::mutate(
+    country_of_interest = ifelse(
+      from_country %in% countries_of_interest,
+      TRUE,
+      FALSE
+    )
+  )
 ```
+
+The primary focus of the analysis is oil tankers, and on voyages departing from `r paste0(countries_of_interest, collapse = " and ")`. We will explore a few figures summarizing all trips ending in California, and then filter to our vessel class and countries of interest for the remainder of the analysis.
+
 
 ---
 
@@ -104,7 +133,7 @@ For the remainder of the analysis after this figure, we will focus on the `tanke
 #| fig-cap: "Summary of CO2 emissions, tanker trips, and unique tanker vessels, by vessel class, for voyages ending at California ports."
 #| fig-height: 3
 tanker_trip_emissions_ending_in_california |>
-  dplyr::group_by(vessel_class) |>
+  dplyr::group_by(vessel_class, class_of_interest) |>
   dplyr::summarise(
     total_trips = dplyr::n_distinct(trip_id),
     total_vessels = dplyr::n_distinct(ssvid),
@@ -125,13 +154,6 @@ tanker_trip_emissions_ending_in_california |>
       "total_vessels" = "Total vessels"
     )
   ) |>
-  dplyr::mutate(
-    class_of_interest = ifelse(
-      vessel_class == "tanker.chemical_oil",
-      TRUE,
-      FALSE
-    )
-  ) |>
   ggplot(aes(
     y = reorder(vessel_class, value),
     x = value,
@@ -149,34 +171,15 @@ tanker_trip_emissions_ending_in_california |>
 
 ```{r}
 #| label: data-country-summary
-
-countries_of_interest <- c("South Korea", "India")
-vessel_class_of_interest <- "tanker.chemical_oil"
-
 country_level_data <- tanker_trip_emissions_ending_in_california |>
   dplyr::filter(vessel_class == vessel_class_of_interest) |>
-  dplyr::group_by(from_country_iso3) |>
+  dplyr::group_by(from_country, country_of_interest) |>
   dplyr::summarise(
     total_trips = dplyr::n_distinct(trip_id),
     total_vessels = dplyr::n_distinct(ssvid),
     emissions_co2_mt = sum(emissions_co2_mt)
   ) |>
   dplyr::arrange(-total_trips) |>
-  dplyr::mutate(
-    from_country = countrycode::countrycode(
-      from_country_iso3,
-      "iso3c",
-      "country.name",
-      nomatch = from_country_iso3
-    )
-  ) |>
-  dplyr::mutate(
-    country_of_interest = ifelse(
-      from_country %in% countries_of_interest,
-      TRUE,
-      FALSE
-    )
-  ) |>
   dplyr::mutate(rank = dplyr::row_number())
 ```
 
@@ -213,5 +216,15 @@ country_level_data |>
   labs(x = "", y = "Departure country") +
   theme(legend.position = "none") +
   scale_fill_brewer(palette = "Set1", direction = -1)
+
+```
+
+```{r}
+# Now, filter to our countries and vessel class of interest for the remainder of the analysis
+tanker_trips_of_interest_emissions_ending_in_california <- tanker_trip_emissions_ending_in_california |>
+  dplyr::filter(
+    vessel_class == vessel_class_of_interest,
+    from_country %in% countries_of_interest
+  )
 
 ```
