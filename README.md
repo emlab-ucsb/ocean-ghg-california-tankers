@@ -10,13 +10,17 @@ Analysis of greenhouse gas (GHG) emissions from ocean tankers arriving at Califo
 
 ## About
 
-This project estimates GHG emissions from tanker vessels calling at California ports using AIS tracking data and a ship-level emissions model. Tankers carry crude oil, petroleum products, liquefied natural gas (LNG), chemicals, and other bulk liquids to California's refineries and import terminals.
+This project estimates GHG emissions from tanker vessels arriving at California ports using AIS tracking data and a ship-level emissions model. The model and methodology are described extensively [here](https://emlab-ucsb.github.io/ocean-ghg/).
 
-Emissions estimated include:
-- CO₂ (carbon dioxide)
-- CH₄ (methane)
-- N₂O (nitrous oxide)
-- CO₂-equivalent totals (using AR5 GWP100 values)
+The analysis queries trip-level emissions data from Global Fishing Watch's BigQuery database for all tanker voyages (chemical/oil, liquefied gas, bunker, and other) departing from non-US ports and arriving at California ports. A SQL query joins vessel characteristics, voyage metadata, and voyage-level emissions, then spatially filters to trips whose arrival point falls within California's boundary.
+
+The primary analytical focus is on **chemical and oil tankers** (`tanker.chemical_oil`) departing from **South Korea and India**. The report includes:
+
+- A summary of trips, vessels, and CO₂ emissions by tanker type
+- A breakdown by departure country for all chemical/oil tanker voyages
+- A breakdown by departure country and California destination port
+- A map of California arrival ports with circles sized by total CO₂ emissions
+- Annual time series of trips, vessels, CO₂ emissions, hours at sea, and distance traveled
 
 ---
 
@@ -35,18 +39,10 @@ You only need the pre-downloaded CSV data file and R/Quarto to render the full a
 | Software | Version | Notes |
 |----------|---------|-------|
 | [R](https://cran.r-project.org/) | ≥ 4.3 | |
-| [RStudio](https://posit.co/download/rstudio-desktop/) | ≥ 2023.09 | Recommended IDE |
+| [Positron](https://positron.posit.co/) or [RStudio](https://posit.co/download/rstudio-desktop/) | Latest | Recommended IDE |
 | [Quarto](https://quarto.org/docs/get-started/) | ≥ 1.4 | Rendering engine |
 
-Required R packages are listed in the **Setup** chunk of `index.qmd`. Install them with:
-
-```r
-install.packages(c(
-  "tidyverse", "bigrquery", "DBI", "here", "glue",
-  "gt", "DT", "plotly", "scales", "lubridate",
-  "sf", "leaflet", "htmltools", "sessioninfo"
-))
-```
+R package dependencies are managed with [renv](https://rstudio.github.io/renv/) and recorded in `renv.lock`.
 
 #### Steps
 
@@ -57,67 +53,45 @@ install.packages(c(
    cd ocean-ghg-california-tankers
    ```
 
-2. **Download the data** — Obtain `california_tanker_emissions.csv` from the project team and place it in the `data/` folder.
+2. **Restore R packages** — When you open the project in your IDE, `renv` will automatically bootstrap itself. Then restore packages from the lockfile:
 
-3. **Render the Quarto document**
+   ```r
+   renv::restore()
+   ```
+
+3. **Obtain the data** — Get `tanker_trip_emissions_ending_in_california.csv` from the project team and place it in the `data/` folder.
+
+4. **Render the Quarto document**
 
    ```bash
    quarto render index.qmd
    ```
 
-   Or open `index.qmd` in RStudio and click **Render**.
+   Or open `index.qmd` in your IDE and click **Render**.
 
-4. The rendered HTML report will open in your browser and is saved to `docs/index.html`.
+5. The rendered HTML report will be saved to `docs/index.html`.
 
 ---
 
 ### Option B — Users with GFW BigQuery Access
 
-If you have been granted access to Global Fishing Watch's internal BigQuery dataset, you can re-pull the raw data and regenerate the CSV.
+If you have been granted access to Global Fishing Watch's BigQuery project, you can re-pull the raw data directly from within the Quarto document.
 
 #### Additional Prerequisites
 
-- A Google account with GFW BigQuery permissions
-- BigQuery project and dataset names (request from the emLab team)
+- A Google Cloud Platform account with access to the Global Fishing Watch BigQuery project
 
 #### Steps
 
-1. **Clone the repository** (same as Option A, step 1)
+1. **Clone the repository and restore packages** (same as Option A, steps 1–2)
 
-2. **Set environment variables** (optional — you can also edit the script directly)
+2. **Render with data pulling enabled** — The Quarto document includes a parameterized code chunk that queries BigQuery and saves the result as a CSV. Activate it by passing `pull_data: true`:
 
    ```bash
-   export GFW_BQ_PROJECT="your-gfw-bq-project"
-   export GFW_BQ_DATASET="your-dataset"
+   quarto render index.qmd -P pull_data:true
    ```
 
-   Or add them to an `.Renviron` file in the project root:
-
-   ```
-   GFW_BQ_PROJECT=your-gfw-bq-project
-   GFW_BQ_DATASET=your-dataset
-   ```
-
-3. **Pull data from BigQuery**
-
-   ```r
-   source("R/01_pull_bq_data.R")
-   ```
-
-   This will authenticate via your Google account (browser pop-up), execute the SQL query, and save the result to `data/california_tanker_emissions.csv`.
-
-4. **Render the Quarto document** — same as Option A, step 3.
-
-   To re-run the BigQuery queries directly from within the Quarto document, render with:
-
-   ```r
-   quarto::quarto_render(
-     "index.qmd",
-     execute_params = list(pull_data = TRUE,
-                           bq_project = "your-gfw-bq-project",
-                           bq_dataset = "your-dataset")
-   )
-   ```
+   This will authenticate via your Google account (browser pop-up), execute the SQL query at `sql/tanker_trip_emissions_ending_in_california.sql`, save the data to `data/tanker_trip_emissions_ending_in_california.csv`, and then continue with the analysis.
 
 ---
 
@@ -126,13 +100,15 @@ If you have been granted access to Global Fishing Watch's internal BigQuery data
 ```
 ocean-ghg-california-tankers/
 ├── _quarto.yml                   # Quarto website project configuration
-├── index.qmd                     # Main analysis document (BigQuery + EDA)
-├── R/
-│   └── 01_pull_bq_data.R         # Standalone script to pull data from BigQuery
+├── index.qmd                     # Main analysis document (data pull + EDA + visualizations)
+├── sql/
+│   └── tanker_trip_emissions_ending_in_california.sql  # SQL query for BigQuery
 ├── data/
 │   ├── README.md                 # Data dictionary and column descriptions
-│   └── california_tanker_emissions.csv   # Downloaded data (not tracked by Git)
+│   └── tanker_trip_emissions_ending_in_california.csv  # Downloaded data (not tracked by Git)
 ├── docs/                         # Rendered HTML output (GitHub Pages source)
+├── renv.lock                     # renv lockfile pinning all R package versions
+├── .Rprofile                     # Activates renv on project load
 ├── .github/
 │   └── workflows/
 │       └── publish.yml           # GitHub Actions: render and deploy to Pages
@@ -141,44 +117,52 @@ ocean-ghg-california-tankers/
 
 ---
 
+## How It Works
+
+Everything is contained within the single Quarto document (`index.qmd`):
+
+1. **Data pull** (optional, `params$pull_data = true`) — A parameterized code chunk executes the SQL query at `sql/tanker_trip_emissions_ending_in_california.sql` against BigQuery and saves the result as a CSV. This only runs when explicitly enabled.
+
+2. **Data loading & preparation** — Reads the CSV, adds derived columns (departure country name, flags for countries/vessel classes of interest), and converts the data to an `sf` spatial object using arrival port coordinates.
+
+3. **Analysis & visualization** — Produces summary bar charts, a California port map, time series plots, and a summary table.
+
+---
+
 ## 🌐 GitHub Pages
 
 The analysis is automatically rendered and published to GitHub Pages via GitHub Actions when changes are pushed to the `main` branch. The workflow (`.github/workflows/publish.yml`) uses [quarto-dev/quarto-actions](https://github.com/quarto-dev/quarto-actions) to deploy to the `gh-pages` branch.
 
-> **Note:** The GitHub Actions workflow requires `data/california_tanker_emissions.csv` to be present at render time. Because CSV data files are excluded from Git (see `.gitignore`), you must make the file available to the workflow in one of these ways:
->
-> 1. **Temporarily commit the CSV** — add, commit, push the file, trigger the workflow, then revert and push again.
-> 2. **GitHub release artifact** — upload the CSV as an asset to a GitHub Release, then add a workflow step to download it (e.g. using `actions/download-artifact` or the GitHub CLI).
-> 3. **Encoded secret** — for very small CSVs, base64-encode the file, store it as a repository secret, and decode it in the workflow.
->
-> The workflow already includes a safety check that will fail with a clear error message if the CSV is not found, rather than silently producing an empty report.
+> **Note:** The GitHub Actions workflow requires `data/tanker_trip_emissions_ending_in_california.csv` to be present at render time. Because CSV data files are excluded from Git, you must make the file available to the workflow (e.g., by temporarily committing it or adding a download step to the workflow).
 
 ---
 
 ## 📦 Dependencies
 
-This analysis is built with:
+R package dependencies are managed with [renv](https://rstudio.github.io/renv/). Run `renv::restore()` to install the exact package versions recorded in `renv.lock`.
+
+Key packages used in the analysis:
 
 | Package | Purpose |
 |---------|---------|
-| [tidyverse](https://www.tidyverse.org/) | Data wrangling and plotting |
-| [bigrquery](https://bigrquery.r-dbi.org/) | Google BigQuery interface |
-| [DBI](https://dbi.r-dbi.org/) | Database connectivity |
-| [here](https://here.r-lib.org/) | Reproducible file paths |
-| [glue](https://glue.tidyverse.org/) | String interpolation for SQL |
-| [gt](https://gt.rstudio.com/) | Publication-quality tables |
-| [DT](https://rstudio.github.io/DT/) | Interactive data tables |
-| [plotly](https://plotly.com/r/) | Interactive plots |
-| [scales](https://scales.r-lib.org/) | Number formatting |
+| [ggplot2](https://ggplot2.tidyverse.org/) | Plotting |
+| [dplyr](https://dplyr.tidyverse.org/) | Data wrangling |
+| [tidyr](https://tidyr.tidyverse.org/) | Reshaping data |
+| [readr](https://readr.tidyverse.org/) | Reading CSV files |
+| [stringr](https://stringr.tidyverse.org/) | String manipulation |
 | [lubridate](https://lubridate.tidyverse.org/) | Date/time handling |
-| [sf](https://r-spatial.github.io/sf/) | Spatial data |
-| [leaflet](https://rstudio.github.io/leaflet/) | Interactive maps |
-| [sessioninfo](https://sessioninfo.r-lib.org/) | Session reproducibility info |
+| [scales](https://scales.r-lib.org/) | Number formatting |
+| [countrycode](https://vincentarelbundock.github.io/countrycode/) | Country code/name conversion |
+| [sf](https://r-spatial.github.io/sf/) | Spatial data and mapping |
+| [rnaturalearth](https://docs.ropensci.org/rnaturalearth/) | Natural Earth map data |
+| [bigrquery](https://bigrquery.r-dbi.org/) | Google BigQuery interface (data pull only) |
+| [here](https://here.r-lib.org/) | Reproducible file paths |
+| [knitr](https://yihui.org/knitr/) | Table rendering |
 
 ---
 
 ## 📬 Contact
 
-This analysis was developed by [emLab at UC Santa Barbara](https://emlab.ucsb.edu) in collaboration with [Global Fishing Watch](https://globalfishingwatch.org/).
+This analysis was developed by [emLab at UC Santa Barbara](https://emlab.ucsb.edu).
 
-For questions about data access, please contact the emLab team.
+For questions about data access, please contact Gavin McDonald (gmcdonald@bren.ucsb.edu).
