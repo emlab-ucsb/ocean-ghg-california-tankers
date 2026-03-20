@@ -116,6 +116,7 @@ tanker_trip_emissions_ending_in_california <- readr::read_csv(
 
 The primary focus of the analysis is oil tankers, and on voyages departing from `r paste0(countries_of_interest, collapse = " and ")`. We will explore a few figures summarizing all trips ending in California, and then filter to our vessel class and countries of interest for the remainder of the analysis.
 
+The dataset includes `r prettyNum(length(unique(tanker_trip_emissions_ending_in_california$trip_id)),big.mark=',')` unique trips, across `r prettyNum(length(unique(tanker_trip_emissions_ending_in_california$ssvid)),big.mark=',')` unique tanker vessels, from `r prettyNum(length(unique(tanker_trip_emissions_ending_in_california$from_country)),big.mark=',')` countries, that had arrival dates ranging from `r paste0(range(tanker_trip_emissions_ending_in_california$arrival_date),collapse = " to ")`.
 
 ---
 
@@ -215,16 +216,119 @@ country_level_data |>
   theme_minimal() +
   labs(x = "", y = "Departure country") +
   theme(legend.position = "none") +
-  scale_fill_brewer(palette = "Set1", direction = -1)
+  scale_fill_brewer(palette = "Set1", direction = -1) +
+  scale_x_continuous(labels = scales::comma)
 
 ```
 
 ```{r}
+#| label: data-filter
 # Now, filter to our countries and vessel class of interest for the remainder of the analysis
 tanker_trips_of_interest_emissions_ending_in_california <- tanker_trip_emissions_ending_in_california |>
   dplyr::filter(
     vessel_class == vessel_class_of_interest,
     from_country %in% countries_of_interest
+  )
+
+```
+
+Next we look at the total amount of CO2 emissions, number of tanker trips, and number of unique tanker vessels, for chemical and oil tanker voyages that end at California ports in our dataset, aggregated by departure country and destination port. This allows us to see which California ports are receiving the most tanker traffic and emissions from our countries of interest.
+
+```{r}
+#| label: fig-country-port-summary
+#| fig-cap: "Summary of CO2 emissions, tanker trips, and unique tanker vessels, by departure country and destination port, for chemical and oil tanker voyages that end at California ports."
+tanker_trips_of_interest_emissions_ending_in_california |>
+  dplyr::mutate(to_port = stringr::str_to_title(to_port)) |>
+  dplyr::group_by(to_port, from_country) |>
+  dplyr::summarise(
+    total_trips = dplyr::n_distinct(trip_id),
+    total_vessels = dplyr::n_distinct(ssvid),
+    emissions_co2_mt = sum(emissions_co2_mt)
+  ) |>
+  tidyr::pivot_longer(
+    cols = c(total_trips, total_vessels, emissions_co2_mt),
+    names_to = "metric",
+    values_to = "value"
+  ) |>
+  dplyr::mutate(
+    metric = dplyr::recode(
+      metric,
+      "emissions_co2_mt" = "CO2 emissions (MT)",
+      "total_trips" = "Total trips",
+      "total_vessels" = "Total vessels"
+    )
+  ) |>
+  ggplot(aes(
+    y = reorder(to_port, value),
+    x = value,
+    fill = from_country
+  )) +
+  geom_bar(stat = "identity", position = "stack") +
+  facet_wrap(~metric, scales = "free_x") +
+  theme_minimal() +
+  labs(x = "", y = "Destination port", fill = "Departure country") +
+  scale_fill_brewer(palette = "Dark2") +
+  scale_x_continuous(labels = scales::comma)
+```
+
+Next we look at a time series plot of number of tanker trips, unique tanker vessels, CO2 emissions, total hours at sea, and total distance traveled (nm), for chemical and oil tanker voyages from South Korea and India that end at California ports. Since 2016 is ongoing, we focus on the 2015-2025 time period. We aggregate by the year during which each voyage arrived in California.
+
+```{r}
+#| label: fig-time-series
+#| fig-cap: "Annual number of tanker trips, unique tanker vessels, CO2 emissions, total hours at sea, and total distance traveled (nm), for chemical and oil tanker voyages from South Korea and India that end at California ports."
+#| fig-height: 10
+annual_summary_data <- tanker_trips_of_interest_emissions_ending_in_california |>
+  dplyr::filter(vessel_class == vessel_class_of_interest) |>
+  dplyr::group_by(
+    year = lubridate::year(arrival_date),
+    from_country
+  ) |>
+  dplyr::summarise(
+    total_trips = dplyr::n_distinct(trip_id),
+    total_vessels = dplyr::n_distinct(ssvid),
+    emissions_co2_mt = sum(emissions_co2_mt),
+    hours = sum(hours),
+    distance_nm = sum(distance_nm)
+  ) |>
+  dplyr::filter(year < 2026) |>
+  tidyr::pivot_longer(
+    cols = c(total_trips, total_vessels, emissions_co2_mt, hours, distance_nm),
+    names_to = "metric",
+    values_to = "value"
+  ) |>
+  dplyr::mutate(
+    metric = dplyr::recode(
+      metric,
+      "emissions_co2_mt" = "CO2 emissions (MT)",
+      "total_trips" = "Total trips",
+      "total_vessels" = "Total vessels",
+      "hours" = "Total hours at sea",
+      "distance_nm" = "Total distance traveled (nm)"
+    )
+  )
+annual_summary_data |>
+  ggplot(aes(x = year, y = value)) +
+  geom_line() +
+  facet_wrap(metric ~ from_country, scales = "free_y", ncol = 2) +
+  theme_minimal() +
+  labs(x = "Year", y = "", color = "Departure country") +
+  scale_color_brewer(palette = "Set1", direction = -1) +
+  scale_y_continuous(labels = scales::comma, limits = c(0, NA)) +
+  scale_x_continuous(breaks = seq(2015, 2025, by = 1)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Here we summarize this annual data in a table
+
+```{r}
+#| label: table-time-series
+
+annual_summary_data |>
+  dplyr::mutate(value = round(value) |> prettyNum(big.mark = ",")) |>
+  tidyr::pivot_wider(names_from = metric, values_from = value) |>
+  dplyr::arrange(from_country, year) |>
+  knitr::kable(
+    caption = "Annual number of tanker trips, unique tanker vessels, CO2 emissions, total hours at sea, and total distance traveled (nm), for chemical and oil tanker voyages from South Korea and India that end at California ports."
   )
 
 ```
