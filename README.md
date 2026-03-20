@@ -6,6 +6,8 @@ Analysis of greenhouse gas (GHG) emissions from ocean tankers arriving at Califo
 
 📊 **[View the Analysis](https://emlab-ucsb.github.io/ocean-ghg-california-tankers/)**
 
+This report was developed by Gavin McDonald (gmcdonald@bren.ucsb.edu) at emLab. It was developed with the help of Claude Code and Positron Assistant.
+
 ---
 
 ## About
