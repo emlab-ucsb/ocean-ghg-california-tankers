@@ -1,0 +1,30 @@
+project:
+  type: website
+  output-dir: docs
+
+website:
+  title: "GHG Emissions from California Tankers"
+  description: "Analysis of greenhouse gas emissions from tankers arriving at California ports using AIS-based emissions modeling"
+  favicon: ""
+  navbar:
+    title: "California Tanker GHG Emissions"
+    left:
+      - href: index.qmd
+        text: Analysis
+  page-footer:
+    left: "Analysis by [emLab-UCSB](https://emlab.ucsb.edu)"
+    right: "Built with [Quarto](https://quarto.org)"
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    code-fold: true
+    code-summary: "Show code"
+    code-tools: true
+    embed-resources: false
+    fig-width: 9
+    fig-height: 6
+    fig-dpi: 150

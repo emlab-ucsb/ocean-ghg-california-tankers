@@ -1,3 +1,20 @@
+# ─── Quarto ───────────────────────────────────────────────────────────────────
+/.quarto/
+*_files/
+*_cache/
+/cache/
+
+# Local Quarto render output (GitHub Pages is deployed via gh-pages branch
+# by GitHub Actions — see .github/workflows/publish.yml)
+docs/
+
+# ─── Data files ───────────────────────────────────────────────────────────────
+# Large/sensitive data CSVs are not tracked — obtain from the project team
+data/*.csv
+data/*.parquet
+data/*.feather
+
+# ─── R ────────────────────────────────────────────────────────────────────────
 # History files
 .Rhistory
 .Rapp.history
@@ -29,8 +46,7 @@ vignettes/*.pdf
 .httr-oauth
 
 # knitr and R markdown default cache directories
-*_cache/
-/cache/
+# (already covered by *_cache/ and /cache/ above)
 
 # Temporary files created by R markdown
 *.utf8.md
@@ -39,8 +55,7 @@ vignettes/*.pdf
 # R Environment Variables
 .Renviron
 
-# pkgdown site
-docs/
+# pkgdown / local render output (covered by docs/ above)
 
 # translation temp files
 po/*~
