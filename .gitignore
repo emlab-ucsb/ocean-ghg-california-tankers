@@ -8,12 +8,6 @@
 # by GitHub Actions — see .github/workflows/publish.yml)
 docs/
 
-# ─── Data files ───────────────────────────────────────────────────────────────
-# Large/sensitive data CSVs are not tracked — obtain from the project team
-data/*.csv
-data/*.parquet
-data/*.feather
-
 # ─── R ────────────────────────────────────────────────────────────────────────
 # History files
 .Rhistory
@@ -62,3 +56,5 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+**/*.quarto_ipynb

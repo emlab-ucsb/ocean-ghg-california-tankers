@@ -1,14 +1,12 @@
 ---
-title: "GHG Emissions from California Tankers"
+title: "GHG Emissions from Tankers that Arrive at California Ports"
 subtitle: "Preliminary Exploratory Data Analysis"
-author: "emLab-UCSB"
+author: "Environmental Markets Lab (emLab), UCSB"
 date: today
 date-format: "MMMM D, YYYY"
 params:
-  pull_data: false   # Set to true only if you have GFW BigQuery credentials
-  bq_project: "your-gfw-bq-project"
-  bq_dataset: "your-dataset"
-  data_file: "data/california_tanker_emissions.csv"
+  pull_data: false   # Set to true only if you have Global Fishing Watch BigQuery credentials
+  data_file: "data/tanker_trip_emissions_ending_in_california.csv"
 format:
   html:
     theme: cosmo
@@ -25,616 +23,195 @@ execute:
   message: false
 ---
 
-```{r setup}
+```{r}
 #| label: setup
 #| include: false
 
-library(tidyverse)
-library(bigrquery)
-library(DBI)
-library(here)
-library(gt)
-library(DT)
-library(plotly)
-library(scales)
-library(lubridate)
-library(sf)
-library(leaflet)
-library(htmltools)
-library(glue)
-
-# Color palette for plots
-emlab_palette <- c(
-  "#004c6d", "#0072a3", "#2896c8", "#56b4e9",
-  "#85cdea", "#b3e2fd", "#e0f5ff"
-)
+library(ggplot2)
+library(countrycode)
 ```
 
 ## Overview
 
-This document explores greenhouse gas (GHG) emissions from tankers arriving at California ports using an AIS (Automatic Identification System)-based emissions model developed in collaboration with [Global Fishing Watch (GFW)](https://globalfishingwatch.org/). Tankers arriving at California represent a significant source of maritime emissions, carrying crude oil, petroleum products, liquefied natural gas (LNG), and chemicals to refineries and terminals along the California coast.
+This document explores greenhouse gas (GHG) emissions from tankers arriving at California ports using an AIS (Automatic Identification System)-based emissions model developed in collaboration between [Environmental Markets Lab (emLab)](https://emlab.ucsb.edu/) and [Global Fishing Watch (GFW)](https://globalfishingwatch.org/). The model and methodology is described extensively [here](https://emlab-ucsb.github.io/ocean-ghg/).
+
+Tankers arriving at California could be a significant source of maritime emissions, carrying crude oil, petroleum products, liquefied natural gas (LNG), and chemicals to refineries and terminals along the California coast. This report provides a preliminary exploratory data analysis (EDA) of tanker emissions based on the GFW model, covering vessel-level emissions estimates for voyages that end at California ports.
 
 ::: {.callout-note}
 ## Data Access
 
-The underlying data are pulled from Global Fishing Watch's internal BigQuery database. **Only collaborators with GFW BigQuery access** can re-run the SQL queries (see `R/01_pull_bq_data.R`). All other users can reproduce this analysis using the pre-downloaded CSV files in the `data/` folder.
+The underlying data are pulled from Google BigQuery, where emLab and Global Fishing Watch store the vessel-level emissions model. **Only collaborators with GFW BigQuery access** can re-run the SQL queries (see `R/01_pull_bq_data.R`). All other users can reproduce this analysis using the pre-downloaded CSV files in the `data/` folder.
 :::
 
 ---
 
-## 1. Data Collection
+## 1. Data Preperation
 
-### BigQuery Queries
 
-The following code block connects to Google BigQuery and retrieves tanker voyage and emissions data for vessels arriving at California ports. This section only runs when `params$pull_data` is `TRUE` (i.e., when you have GFW BigQuery credentials configured).
+The following code block connects to Google BigQuery and retrieves tanker voyage and emissions data for vessels arriving at California ports. This section only runs when `params$pull_data` is `TRUE` (i.e., when you have Global Fishing Watch BigQuery credentials configured). This chunk downloads the data and saves it as a CSV file in the `data/` folder, which is then loaded in the next section for analysis. If you do not have BigQuery access, you can skip this section and use the pre-downloaded CSV file.
 
-```{r bq-connect}
-#| label: bq-connect
+
+
+```{r}
+#| label: bq-download data
 #| eval: !expr params$pull_data
 #| echo: true
+# Code to pull data from BigQuery and save as .csv file
+# Note: This can only be run by users with access to the BigQuery project and dataset
+billing_project <- "emlab-gcp"
 
-# Authenticate with Google BigQuery
-# Requires GFW BigQuery access — run bq_auth() interactively or use a
-# service account key file specified in the GOOGLE_APPLICATION_CREDENTIALS
-# environment variable.
-bq_auth()
-
-# Connect to BigQuery
-con <- dbConnect(
-  bigrquery::bigquery(),
-  project = params$bq_project,
-  dataset  = params$bq_dataset
-)
+# Pull data describing all tanker trips that end in California,
+# along with their associated emissions, distance traveled, hours, starting and ending ports, etc
+bigrquery::bq_project_query(
+  billing_project,
+  here::here(
+    "sql",
+    "tanker_trip_emissions_ending_in_california.sql"
+  ) |>
+    readr::read_file()
+) |>
+  bigrquery::bq_table_download(n_max = Inf) |>
+  readr::write_csv(here::here(
+    params$data_file
+  ))
 ```
-
-```{r bq-query}
-#| label: bq-query
-#| eval: !expr params$pull_data
-#| echo: true
-
-# SQL query: tanker port visits and voyage emissions for California ports
-# Update the fully-qualified table names (project.dataset.table) to match
-# the actual GFW BigQuery schema you have access to.
-query_emissions <- glue("
-  WITH california_port_visits AS (
-    SELECT
-      vessel_id,
-      port_label      AS port_name,
-      start_timestamp AS arrival_timestamp,
-      end_timestamp   AS departure_timestamp,
-      anchorage_id
-    FROM `{params$bq_project}.{params$bq_dataset}.port_visits`
-    WHERE country_iso3 = 'USA'
-      AND port_label IN (
-          'Los Angeles',
-          'Long Beach',
-          'San Francisco',
-          'Richmond',
-          'Martinez',
-          'Benicia',
-          'El Segundo',
-          'Huntington Beach',
-          'Redondo Beach',
-          'Carson',
-          'Wilmington'
-      )
-      AND EXTRACT(YEAR FROM start_timestamp) BETWEEN 2016 AND 2023
-  ),
-
-  tankers AS (
-    SELECT
-      vessel_id,
-      mmsi,
-      vessel_name,
-      flag_state,
-      vessel_class,    -- e.g. 'crude_or_product_tanker', 'chemical_tanker', 'lng_tanker', 'lpg_tanker'
-      vessel_length_m,
-      vessel_gt        -- gross tonnage
-    FROM `{params$bq_project}.{params$bq_dataset}.vessels`
-    WHERE vessel_class LIKE '%tanker%'
-  )
-
-  SELECT
-    t.mmsi,
-    t.vessel_name,
-    t.flag_state,
-    t.vessel_class,
-    t.vessel_length_m,
-    t.vessel_gt,
-    pv.port_name,
-    pv.arrival_timestamp,
-    pv.departure_timestamp,
-    TIMESTAMP_DIFF(pv.departure_timestamp, pv.arrival_timestamp, HOUR) AS port_time_hours,
-    e.co2_tonnes,
-    e.ch4_tonnes,
-    e.n2o_tonnes,
-    -- CO2-equivalent using AR5 GWP100 for fossil fuel sources (CH4: 28, N2O: 265)
-    (e.co2_tonnes + e.ch4_tonnes * 28 + e.n2o_tonnes * 265) AS co2e_tonnes,
-    e.fuel_consumption_tonnes,
-    e.voyage_duration_hours,
-    e.voyage_distance_nm,
-    e.voyage_origin_port,
-    e.voyage_origin_country,
-    e.engine_type     -- 'VLSFO', 'MGO', 'HFO', 'LNG', etc.
-
-  FROM california_port_visits pv
-  INNER JOIN tankers t
-    USING (vessel_id)
-  LEFT JOIN `{params$bq_project}.{params$bq_dataset}.voyage_emissions` e
-    ON  pv.vessel_id         = e.vessel_id
-    AND pv.arrival_timestamp = e.arrival_timestamp
-
-  ORDER BY pv.arrival_timestamp
-")
-
-df_raw <- dbGetQuery(con, query_emissions)
-```
-
-```{r bq-save}
-#| label: bq-save
-#| eval: !expr params$pull_data
-#| echo: true
-
-# Save raw data to CSV so others can reproduce the analysis without BQ access
-dir.create(here("data"), showWarnings = FALSE)
-write_csv(df_raw, here(params$data_file))
-message(glue("Saved {nrow(df_raw)} rows to {params$data_file}"))
-
-# Disconnect
-dbDisconnect(con)
-```
-
----
 
 ## 2. Load Data
 
-```{r load-data}
+Here we load the tanker trip emissions data from the CSV file into R for analysis. This dataset includes vessel-level emissions estimates for voyages that end at California ports, along with associated metadata such as distance traveled, hours at sea, starting and ending ports, and more. The dataset can be directly accessed in the GitHub repo: `r {params$data_file}`.
+
+```{r}
 #| label: load-data
 
-df <- read_csv(here(params$data_file), show_col_types = FALSE) |>
-  mutate(
-    arrival_date   = as_date(arrival_timestamp),
-    departure_date = as_date(departure_timestamp),
-    year           = year(arrival_date),
-    month          = month(arrival_date, label = TRUE, abbr = TRUE),
-    quarter        = paste0(year, " Q", quarter(arrival_date))
-  )
-
-glimpse(df)
+tanker_trip_emissions_ending_in_california <- readr::read_csv(
+  here::here(params$data_file)
+)
 ```
 
 ---
 
 ## 3. Exploratory Data Analysis
 
-### 3.1 Dataset Overview
+In this section, we conduct a preliminary exploratory data analysis (EDA) of the tanker trip emissions data. We will examine the distribution of emissions across voyages, identify key ports and routes, and explore potential trends in the data.
 
-```{r summary-table}
-#| label: summary-table
 
-tibble(
-  Metric = c(
-    "Total port calls",
-    "Unique vessels (MMSI)",
-    "Unique ports",
-    "Date range",
-    "Years covered",
-    "Total CO₂ (tonnes)",
-    "Total CO₂e (tonnes)",
-    "Total fuel consumption (tonnes)"
-  ),
-  Value = c(
-    format(nrow(df), big.mark = ","),
-    format(n_distinct(df$mmsi), big.mark = ","),
-    format(n_distinct(df$port_name), big.mark = ","),
-    paste(min(df$arrival_date, na.rm = TRUE), "to", max(df$arrival_date, na.rm = TRUE)),
-    paste(min(df$year, na.rm = TRUE), "–", max(df$year, na.rm = TRUE)),
-    format(round(sum(df$co2_tonnes, na.rm = TRUE)), big.mark = ","),
-    format(round(sum(df$co2e_tonnes, na.rm = TRUE)), big.mark = ","),
-    format(round(sum(df$fuel_consumption_tonnes, na.rm = TRUE)), big.mark = ",")
-  )
-) |>
-  gt() |>
-  tab_header(title = "Summary Statistics") |>
-  cols_label(Metric = "Metric", Value = "Value") |>
-  tab_options(table.width = pct(70))
-```
+First we look at the total amount of CO2 emissions, number of tanker trips, and number of unique tanker vessels, and  for all tanker voyages that end at California ports in our dataset, aggregated by tanker type. The class with by far the most activity is `tanker.chemical_oil`, which includes crude oil tankers, petroleum product tankers, and chemical tankers. We cannot at this time differentiate further between chemica and oil tankers, but we should eventually have this capability later this year. `tanker.liquified_gas` are much less common in voyages ending in California.
 
-### 3.2 Port Calls Over Time
+For the remainder of the analysis after this figure, we will focus on the `tanker.chemical_oil` class.
 
-```{r port-calls-time}
-#| label: port-calls-time
-
-port_calls_monthly <- df |>
-  count(year, month, name = "port_calls") |>
-  mutate(date = as_date(paste(year, as.integer(month), "01", sep = "-")))
-
-p_calls <- ggplot(port_calls_monthly, aes(x = date, y = port_calls)) +
-  geom_col(fill = emlab_palette[2], alpha = 0.85) +
-  geom_smooth(method = "loess", se = TRUE, color = emlab_palette[1],
-              linewidth = 0.8, fill = emlab_palette[5], alpha = 0.3) +
-  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
-  scale_y_continuous(labels = comma) +
-  labs(
-    title    = "Monthly Tanker Port Calls at California Ports",
-    subtitle = "Vessels calling at California ports",
-    x        = NULL,
-    y        = "Number of port calls",
-    caption  = "Source: Global Fishing Watch AIS-based emissions model"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(panel.grid.minor = element_blank())
-
-ggplotly(p_calls) |> layout(hovermode = "x unified")
-```
-
-### 3.3 Annual CO₂ Emissions
-
-```{r annual-emissions}
-#| label: annual-emissions
-
-emissions_annual <- df |>
-  group_by(year) |>
-  summarise(
-    co2_tonnes  = sum(co2_tonnes, na.rm = TRUE),
-    co2e_tonnes = sum(co2e_tonnes, na.rm = TRUE),
-    .groups     = "drop"
+```{r}
+#| label: fig-vessel-class-summary
+#| fig-cap: "Summary of CO2 emissions, tanker trips, and unique tanker vessels, by vessel class, for voyages ending at California ports."
+#| fig-height: 3
+tanker_trip_emissions_ending_in_california |>
+  dplyr::group_by(vessel_class) |>
+  dplyr::summarise(
+    total_trips = dplyr::n_distinct(trip_id),
+    total_vessels = dplyr::n_distinct(ssvid),
+    emissions_co2_mt = sum(emissions_co2_mt)
   ) |>
-  pivot_longer(c(co2_tonnes, co2e_tonnes),
-               names_to = "gas", values_to = "tonnes") |>
-  mutate(gas = recode(gas,
-                      co2_tonnes  = "CO₂",
-                      co2e_tonnes = "CO₂e (AR5 GWP100)"))
 
-p_emissions <- ggplot(emissions_annual, aes(x = year, y = tonnes / 1e6,
-                                             color = gas, group = gas)) +
-  geom_line(linewidth = 1.1) +
-  geom_point(size = 2.5) +
-  scale_y_continuous(labels = label_number(suffix = " Mt")) +
-  scale_color_manual(values = emlab_palette[c(1, 3)]) +
-  labs(
-    title   = "Annual GHG Emissions from California-bound Tankers",
-    x       = NULL,
-    y       = "Emissions (megatonnes)",
-    color   = NULL,
-    caption = "Source: Global Fishing Watch AIS-based emissions model"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(
-    legend.position  = "top",
-    panel.grid.minor = element_blank()
-  )
+  dplyr::arrange(-total_trips) |>
+  tidyr::pivot_longer(
+    cols = c(total_trips, total_vessels, emissions_co2_mt),
+    names_to = "metric",
+    values_to = "value"
+  ) |>
+  dplyr::mutate(
+    metric = dplyr::recode(
+      metric,
+      "emissions_co2_mt" = "CO2 emissions (MT)",
+      "total_trips" = "Total trips",
+      "total_vessels" = "Total vessels"
+    )
+  ) |>
+  dplyr::mutate(
+    class_of_interest = ifelse(
+      vessel_class == "tanker.chemical_oil",
+      TRUE,
+      FALSE
+    )
+  ) |>
+  ggplot(aes(
+    y = reorder(vessel_class, value),
+    x = value,
+    fill = class_of_interest
+  )) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~metric, scales = "free_x") +
+  theme_minimal() +
+  labs(x = "", y = "Vessel class") +
+  theme(legend.position = "none") +
+  scale_fill_brewer(palette = "Set1", direction = -1)
 
-ggplotly(p_emissions)
 ```
 
-### 3.4 Emissions by California Port
 
-```{r emissions-by-port}
-#| label: emissions-by-port
+```{r}
+#| label: data-country-summary
 
-emissions_port <- df |>
-  group_by(port_name) |>
-  summarise(
-    port_calls  = n(),
-    co2e_tonnes = sum(co2e_tonnes, na.rm = TRUE),
-    .groups     = "drop"
+countries_of_interest <- c("South Korea", "India")
+vessel_class_of_interest <- "tanker.chemical_oil"
+
+country_level_data <- tanker_trip_emissions_ending_in_california |>
+  dplyr::filter(vessel_class == vessel_class_of_interest) |>
+  dplyr::group_by(from_country_iso3) |>
+  dplyr::summarise(
+    total_trips = dplyr::n_distinct(trip_id),
+    total_vessels = dplyr::n_distinct(ssvid),
+    emissions_co2_mt = sum(emissions_co2_mt)
   ) |>
-  arrange(desc(co2e_tonnes))
-
-p_port <- ggplot(emissions_port,
-                 aes(x = co2e_tonnes / 1e3,
-                     y = reorder(port_name, co2e_tonnes))) +
-  geom_col(fill = emlab_palette[2]) +
-  scale_x_continuous(labels = label_comma(suffix = " kt")) +
-  labs(
-    title    = "Total CO₂e Emissions by California Port",
-    subtitle = "Sum across all years",
-    x        = "CO₂e (kilotonnes)",
-    y        = NULL,
-    caption  = "Source: Global Fishing Watch AIS-based emissions model"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(panel.grid.minor = element_blank())
-
-ggplotly(p_port)
+  dplyr::arrange(-total_trips) |>
+  dplyr::mutate(
+    from_country = countrycode::countrycode(
+      from_country_iso3,
+      "iso3c",
+      "country.name",
+      nomatch = from_country_iso3
+    )
+  ) |>
+  dplyr::mutate(
+    country_of_interest = ifelse(
+      from_country %in% countries_of_interest,
+      TRUE,
+      FALSE
+    )
+  ) |>
+  dplyr::mutate(rank = dplyr::row_number())
 ```
 
-### 3.5 Vessel Class Breakdown
+Next we look at the total amount of CO2 emissions, number of tanker trips, and number of unique tanker vessels, and  for all chemical and oil tanker voyages that end at California ports in our dataset, aggregated by departure country. In terms of CO2 emissions, our countries of interest, `r country_level_data |> dplyr::filter(country_of_interest) |> dplyr::pull(from_country) |> paste0(collapse = " and ")`, rank `r country_level_data |> dplyr::filter(country_of_interest) |> dplyr::pull(rank) |> paste0(collapse = " and ")` respectively out of `r nrow(country_level_data)` countries with voyages ending in California.
 
-```{r vessel-class}
-#| label: vessel-class
+For the remainder of the analysis after this figure, we will focus on voyages departing from our countries of interest, `r country_level_data |> dplyr::filter(country_of_interest) |> dplyr::pull(from_country) |> paste0(collapse = " and ")`.
 
-vessel_class_summary <- df |>
-  group_by(vessel_class) |>
-  summarise(
-    port_calls       = n(),
-    co2e_tonnes      = sum(co2e_tonnes, na.rm = TRUE),
-    median_gt        = median(vessel_gt, na.rm = TRUE),
-    .groups          = "drop"
+```{r}
+#| label: fig-country-summary
+#| fig-cap: "Summary of CO2 emissions, tanker trips, and unique tanker vessels, by departure country, for voyages ending at California ports."
+#| fig-height: 10
+country_level_data |>
+  tidyr::pivot_longer(
+    cols = c(total_trips, total_vessels, emissions_co2_mt),
+    names_to = "metric",
+    values_to = "value"
   ) |>
-  mutate(
-    share_calls     = port_calls  / sum(port_calls),
-    share_emissions = co2e_tonnes / sum(co2e_tonnes)
+  dplyr::mutate(
+    metric = dplyr::recode(
+      metric,
+      "emissions_co2_mt" = "CO2 emissions (MT)",
+      "total_trips" = "Total trips",
+      "total_vessels" = "Total vessels"
+    )
   ) |>
-  arrange(desc(co2e_tonnes))
+  ggplot(aes(
+    y = reorder(from_country, value),
+    x = value,
+    fill = country_of_interest
+  )) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~metric, scales = "free_x") +
+  theme_minimal() +
+  labs(x = "", y = "Departure country") +
+  theme(legend.position = "none") +
+  scale_fill_brewer(palette = "Set1", direction = -1)
 
-vessel_class_summary |>
-  select(vessel_class, port_calls, share_calls,
-         co2e_tonnes, share_emissions, median_gt) |>
-  gt() |>
-  tab_header(title = "Vessel Class Summary") |>
-  cols_label(
-    vessel_class     = "Vessel class",
-    port_calls       = "Port calls",
-    share_calls      = "Share of calls",
-    co2e_tonnes      = "CO₂e (t)",
-    share_emissions  = "Share of emissions",
-    median_gt        = "Median GT"
-  ) |>
-  fmt_number(co2e_tonnes, suffixing = TRUE, decimals = 1) |>
-  fmt_percent(c(share_calls, share_emissions), decimals = 1) |>
-  fmt_number(median_gt, big_mark = ",", decimals = 0) |>
-  data_color(
-    columns    = share_emissions,
-    palette    = c("white", emlab_palette[2])
-  )
-```
-
-```{r vessel-class-plot}
-#| label: vessel-class-plot
-
-p_class <- ggplot(
-  vessel_class_summary,
-  aes(x = port_calls, y = co2e_tonnes / 1e3,
-      size = median_gt, color = vessel_class,
-      text = paste0(
-        "Class: ", vessel_class,
-        "\nPort calls: ", comma(port_calls),
-        "\nCO₂e: ", comma(round(co2e_tonnes / 1e3)), " kt",
-        "\nMedian GT: ", comma(round(median_gt))
-      ))
-) +
-  geom_point(alpha = 0.8) +
-  scale_x_continuous(labels = comma) +
-  scale_y_continuous(labels = label_comma(suffix = " kt")) +
-  scale_size_continuous(range = c(4, 14), labels = comma) +
-  scale_color_manual(values = emlab_palette) +
-  labs(
-    title  = "Port Calls vs. CO₂e Emissions by Vessel Class",
-    x      = "Number of port calls",
-    y      = "Total CO₂e (kilotonnes)",
-    size   = "Median GT",
-    color  = "Vessel class"
-  ) +
-  theme_minimal(base_size = 13)
-
-ggplotly(p_class, tooltip = "text")
-```
-
-### 3.6 Fuel and Engine Type
-
-```{r fuel-type}
-#| label: fuel-type
-
-fuel_summary <- df |>
-  filter(!is.na(engine_type)) |>
-  group_by(engine_type) |>
-  summarise(
-    port_calls       = n(),
-    co2e_tonnes      = sum(co2e_tonnes, na.rm = TRUE),
-    fuel_tonnes      = sum(fuel_consumption_tonnes, na.rm = TRUE),
-    .groups          = "drop"
-  ) |>
-  mutate(
-    share_emissions = co2e_tonnes / sum(co2e_tonnes),
-    emission_factor = co2e_tonnes / fuel_tonnes
-  ) |>
-  arrange(desc(co2e_tonnes))
-
-p_fuel <- ggplot(fuel_summary,
-                 aes(x = reorder(engine_type, co2e_tonnes),
-                     y = co2e_tonnes / 1e3,
-                     fill = engine_type)) +
-  geom_col(show.legend = FALSE) +
-  coord_flip() +
-  scale_y_continuous(labels = label_comma(suffix = " kt")) +
-  scale_fill_manual(values = emlab_palette) +
-  labs(
-    title    = "CO₂e Emissions by Fuel / Engine Type",
-    x        = NULL,
-    y        = "CO₂e (kilotonnes)",
-    caption  = "Source: Global Fishing Watch AIS-based emissions model"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(panel.grid.minor = element_blank())
-
-ggplotly(p_fuel)
-```
-
-### 3.7 Flag State Distribution
-
-```{r flag-state}
-#| label: flag-state
-
-top_flags <- df |>
-  group_by(flag_state) |>
-  summarise(
-    port_calls  = n(),
-    co2e_tonnes = sum(co2e_tonnes, na.rm = TRUE),
-    .groups     = "drop"
-  ) |>
-  arrange(desc(port_calls)) |>
-  slice_head(n = 15)
-
-p_flag <- ggplot(top_flags,
-                 aes(x = co2e_tonnes / 1e3,
-                     y = reorder(flag_state, co2e_tonnes),
-                     fill = port_calls)) +
-  geom_col() +
-  scale_x_continuous(labels = label_comma(suffix = " kt")) +
-  scale_fill_gradient(low = emlab_palette[5], high = emlab_palette[1],
-                      labels = comma) +
-  labs(
-    title    = "Top 15 Flag States — CO₂e Emissions",
-    x        = "CO₂e (kilotonnes)",
-    y        = NULL,
-    fill     = "Port calls",
-    caption  = "Source: Global Fishing Watch AIS-based emissions model"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(panel.grid.minor = element_blank())
-
-ggplotly(p_flag)
-```
-
-### 3.8 Voyage Origin Analysis
-
-```{r voyage-origin}
-#| label: voyage-origin
-
-origin_summary <- df |>
-  filter(!is.na(voyage_origin_country)) |>
-  group_by(voyage_origin_country) |>
-  summarise(
-    port_calls  = n(),
-    co2e_tonnes = sum(co2e_tonnes, na.rm = TRUE),
-    avg_dist_nm = mean(voyage_distance_nm, na.rm = TRUE),
-    .groups     = "drop"
-  ) |>
-  arrange(desc(co2e_tonnes)) |>
-  slice_head(n = 20)
-
-origin_summary |>
-  gt() |>
-  tab_header(title = "Top 20 Voyage Origin Countries") |>
-  cols_label(
-    voyage_origin_country = "Origin country",
-    port_calls            = "Port calls",
-    co2e_tonnes           = "CO₂e (t)",
-    avg_dist_nm           = "Avg. distance (nm)"
-  ) |>
-  fmt_number(co2e_tonnes, suffixing = TRUE, decimals = 1) |>
-  fmt_number(avg_dist_nm, decimals = 0, big_mark = ",") |>
-  data_color(
-    columns = co2e_tonnes,
-    palette = c("white", emlab_palette[2])
-  )
-```
-
-### 3.9 Emissions per Port Call Over Time
-
-```{r emissions-per-call}
-#| label: emissions-per-call
-
-emissions_per_call <- df |>
-  group_by(year) |>
-  summarise(
-    port_calls       = n(),
-    co2e_tonnes      = sum(co2e_tonnes, na.rm = TRUE),
-    avg_co2e_per_call = mean(co2e_tonnes, na.rm = TRUE),
-    .groups          = "drop"
-  )
-
-p_intensity <- ggplot(emissions_per_call,
-                      aes(x = year, y = avg_co2e_per_call)) +
-  geom_line(color = emlab_palette[1], linewidth = 1.1) +
-  geom_point(color = emlab_palette[1], size = 3) +
-  scale_y_continuous(labels = comma) +
-  labs(
-    title   = "Average CO₂e per Port Call Over Time",
-    subtitle = "Indicator of per-voyage emissions intensity",
-    x       = NULL,
-    y       = "Average CO₂e per port call (tonnes)",
-    caption = "Source: Global Fishing Watch AIS-based emissions model"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(panel.grid.minor = element_blank())
-
-ggplotly(p_intensity)
-```
-
-### 3.10 Interactive Port Map
-
-```{r port-map}
-#| label: port-map
-
-# California port coordinates (approximate)
-port_coords <- tribble(
-  ~port_name,         ~lon,       ~lat,
-  "Los Angeles",      -118.2437,  33.7295,
-  "Long Beach",       -118.2165,  33.7541,
-  "San Francisco",    -122.4194,  37.7749,
-  "Richmond",         -122.3536,  37.9358,
-  "Martinez",         -122.1341,  38.0194,
-  "Benicia",          -122.1597,  38.0494,
-  "El Segundo",       -118.4160,  33.9192,
-  "Huntington Beach", -118.0089,  33.6603,
-  "Redondo Beach",    -118.3884,  33.8497,
-  "Carson",           -118.2824,  33.8314,
-  "Wilmington",       -118.2653,  33.7748
-)
-
-port_map_data <- emissions_port |>
-  left_join(port_coords, by = "port_name") |>
-  filter(!is.na(lat))
-
-leaflet(port_map_data) |>
-  addProviderTiles(providers$CartoDB.Positron) |>
-  addCircleMarkers(
-    lng    = ~lon,
-    lat    = ~lat,
-    radius = ~scales::rescale(co2e_tonnes, to = c(5, 25)),
-    color  = emlab_palette[1],
-    fillColor = emlab_palette[3],
-    fillOpacity = 0.7,
-    stroke = TRUE,
-    weight = 1.5,
-    popup  = ~paste0(
-      "<strong>", port_name, "</strong><br>",
-      "Port calls: ", comma(port_calls), "<br>",
-      "Total CO₂e: ", comma(round(co2e_tonnes / 1e3)), " kt"
-    ),
-    label  = ~port_name
-  ) |>
-  addLegend(
-    "bottomright",
-    colors = emlab_palette[3],
-    labels = "California tanker port",
-    title  = "Circle size = total CO₂e"
-  )
-```
-
----
-
-## 4. Summary
-
-```{r summary-stats}
-#| label: summary-stats
-
-top_port   <- emissions_port |> slice_max(co2e_tonnes, n = 1) |> pull(port_name)
-total_co2e <- sum(df$co2e_tonnes, na.rm = TRUE)
-n_vessels  <- n_distinct(df$mmsi)
-n_calls    <- nrow(df)
-year_range <- paste(min(df$year), "–", max(df$year))
-```
-
-This analysis covers **`r comma(n_calls)` port calls** by **`r comma(n_vessels)` unique tankers** at California ports between **`r year_range`**. Total CO₂e emissions over this period were approximately **`r label_number(accuracy = 0.1, suffix = " Mt", scale = 1e-6)(total_co2e)`**. The port of **`r top_port`** received the largest share of tanker traffic and associated emissions.
-
-Key findings from the preliminary EDA:
-
-- The distribution of emissions across ports reflects California's refinery and terminal infrastructure
-- Crude oil and product tankers dominate port calls and associated emissions
-- Fuel oil (HFO/VLSFO) remains the primary fuel type, though alternative fuels are emerging
-- Emission intensity per voyage varies by vessel class and voyage origin
-
----
-
-## Session Info
-
-```{r session-info}
-#| label: session-info
-#| code-fold: true
-
-sessioninfo::session_info()
 ```
