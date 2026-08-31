@@ -10,14 +10,13 @@ This report was developed by Gavin McDonald (gmcdonald@bren.ucsb.edu) at emLab. 
 
 ## About
 
-This project estimates GHG emissions from tanker vessels arriving at California ports using AIS tracking data and a ship-level emissions model. The model and methodology are described extensively [here](https://emlab-ucsb.github.io/ocean-ghg/).
+This project estimates GHG emissions from tanker vessels arriving at California ports using AIS tracking data and a ship-level emissions model. The model and methodology are described extensively [here](https://emlab-ucsb.github.io/ocean-ghg/). The current query reads the `v20260714` model tables, which identify oil tankers as their own class (`tanker.oil`); earlier versions grouped oil and chemical tankers together as `tanker.chemical_oil`.
 
-The analysis queries trip-level emissions data from Global Fishing Watch's BigQuery database for all tanker voyages (chemical/oil, liquefied gas, bunker, and other) departing from non-US ports and arriving at California ports. A SQL query joins vessel characteristics, voyage metadata, and voyage-level emissions, then spatially filters to trips whose arrival point falls within California's boundary.
+The analysis queries trip-level emissions data from Global Fishing Watch's BigQuery database for all oil tanker voyages (`tanker.oil`) departing from non-US ports and arriving at California ports. A SQL query joins vessel characteristics, voyage metadata, and voyage-level emissions, then spatially filters to trips whose arrival point falls within California's boundary.
 
-The primary analytical focus is on **chemical and oil tankers** (`tanker.chemical_oil`) departing from **South Korea and India**. The report includes:
+The primary analytical focus is on **oil tankers** (`tanker.oil`) departing from **South Korea and India**. The report includes:
 
-- A summary of trips, vessels, and CO₂ emissions by tanker type
-- A breakdown by departure country for all chemical/oil tanker voyages
+- A breakdown by departure country for all oil tanker voyages
 - A breakdown by departure country and California destination port
 - A map of California arrival ports with circles sized by total CO₂ emissions
 - Annual time series of trips, vessels, CO₂ emissions, hours at sea, and distance traveled
@@ -38,7 +37,7 @@ These are the columns in `tanker_trip_emissions_ending_in_california.csv` as out
 | `tonnage_gt` | numeric | Gross tonnage |
 | `length_m` | numeric | Vessel length (metres) |
 | `flag` | string | ISO 3-letter country code for the vessel flag state |
-| `vessel_class` | string | Tanker sub-class (e.g., `tanker.chemical_oil`, `tanker.liquefied_gas`, `bunker_or_tanker`, `tanker.other`) |
+| `vessel_class` | string | Tanker sub-class. The current query returns only `tanker.oil`, which covers asphalt/bitumen tankers, coal/oil mixture tankers, crude oil tankers, crude/oil products tankers, products tankers, shuttle tankers, and unspecified tankers. |
 | `to_anchorage_id` | string | GFW anchorage ID for the arrival port |
 | `from_anchorage_id` | string | GFW anchorage ID for the departure port |
 | `vessel_id` | string | GFW vessel identifier |
@@ -79,7 +78,7 @@ You only need the pre-downloaded CSV data file and R/Quarto to render the full a
 
 | Software | Version | Notes |
 |----------|---------|-------|
-| [R](https://cran.r-project.org/) | ≥ 4.3 | |
+| [R](https://cran.r-project.org/) | ≥ 4.6 | `renv.lock` records R 4.6.0 |
 | [Positron](https://positron.posit.co/) or [RStudio](https://posit.co/download/rstudio-desktop/) | Latest | Recommended IDE |
 | [Quarto](https://quarto.org/docs/get-started/) | ≥ 1.4 | Rendering engine |
 
@@ -100,7 +99,7 @@ R package dependencies are managed with [renv](https://rstudio.github.io/renv/) 
    renv::restore()
    ```
 
-3. **Ensure the data are available** — `tanker_trip_emissions_ending_in_california.csv` is available in the `data/` folder. This was pre-downloaded using special permissions to Google BigQuery.
+3. **Ensure the data are available** — `tanker_trip_emissions_ending_in_california.csv` is committed to the repository in the `data/` folder, so it arrives with the clone. It was pre-downloaded using special permissions to Google BigQuery.
 
 4. **Render the Quarto document**
 
@@ -120,7 +119,7 @@ If you have been granted access to Global Fishing Watch's BigQuery project, you 
 
 #### Additional Prerequisites
 
-- A Google Cloud Platform account with access to the Global Fishing Watch BigQuery project
+- A Google Cloud Platform account with access to the Global Fishing Watch BigQuery project (`world-fishing-827`) and billing rights on `emlab-gcp`
 
 #### Steps
 
@@ -134,6 +133,15 @@ If you have been granted access to Global Fishing Watch's BigQuery project, you 
 
    This will authenticate via your Google account (browser pop-up), execute the SQL query at `sql/tanker_trip_emissions_ending_in_california.sql`, save the data to `data/tanker_trip_emissions_ending_in_california.csv`, and then continue with the analysis.
 
+   > [!NOTE]
+   > `quarto render` runs R non-interactively, so if you have more than one Google account cached, `gargle` cannot prompt you to choose and the render will fail. Pin the account by adding a line to your `~/.Renviron`:
+   >
+   > ```
+   > GARGLE_EMAIL=you@example.com
+   > ```
+   >
+   > Restart R afterwards. Alternatively, run `bigrquery::bq_auth()` once in an interactive R console before rendering.
+
 ---
 
 ## 📁 Repository Structure
@@ -146,13 +154,10 @@ ocean-ghg-california-tankers/
 │   └── tanker_trip_emissions_ending_in_california.sql  # SQL query for BigQuery
 ├── data/
 │   ├── README.md                 # Data dictionary and column descriptions
-│   └── tanker_trip_emissions_ending_in_california.csv  # Downloaded data (not tracked by Git)
+│   └── tanker_trip_emissions_ending_in_california.csv  # Downloaded data (tracked by Git)
 ├── docs/                         # Rendered HTML output (GitHub Pages source)
 ├── renv.lock                     # renv lockfile pinning all R package versions
 ├── .Rprofile                     # Activates renv on project load
-├── .github/
-│   └── workflows/
-│       └── publish.yml           # GitHub Actions: render and deploy to Pages
 └── README.md                     # This file
 ```
 
@@ -172,7 +177,9 @@ Everything is contained within the single Quarto document (`index.qmd`):
 
 ## 🌐 GitHub Pages
 
-The analysis is automatically rendered and published to GitHub Pages via GitHub Actions when changes are pushed to the `main` branch. The workflow (`.github/workflows/publish.yml`) uses [quarto-dev/quarto-actions](https://github.com/quarto-dev/quarto-actions) to deploy to the `gh-pages` branch.
+The site is published by GitHub Pages directly from the `docs/` folder on the `main` branch. There is no rendering workflow: render locally with `quarto render index.qmd`, which writes to `docs/`, then commit and push those files. GitHub's built-in `pages-build-deployment` job picks the change up automatically.
+
+Because rendering happens locally, the published site reflects whatever package versions are in your `renv` library — run `renv::restore()` first if you want it to match `renv.lock`.
 
 ---
 

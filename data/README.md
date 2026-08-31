@@ -20,7 +20,7 @@ These are the columns in `tanker_trip_emissions_ending_in_california.csv` as out
 | `tonnage_gt` | numeric | Gross tonnage |
 | `length_m` | numeric | Vessel length (metres) |
 | `flag` | string | ISO 3-letter country code for the vessel flag state |
-| `vessel_class` | string | Tanker sub-class (e.g., `tanker.chemical_oil`, `tanker.liquefied_gas`, `bunker_or_tanker`, `tanker.other`) |
+| `vessel_class` | string | Tanker sub-class. The current query returns only `tanker.oil`, which covers asphalt/bitumen tankers, coal/oil mixture tankers, crude oil tankers, crude/oil products tankers, products tankers, shuttle tankers, and unspecified tankers. |
 | `to_anchorage_id` | string | GFW anchorage ID for the arrival port |
 | `from_anchorage_id` | string | GFW anchorage ID for the departure port |
 | `vessel_id` | string | GFW vessel identifier |
