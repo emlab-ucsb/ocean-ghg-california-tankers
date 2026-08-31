@@ -8,11 +8,10 @@ WITH
       length_m,
       flag,
       vessel_class
-    FROM `world-fishing-827.proj_ocean_ghg.vessel_info_v20250701`
+    FROM `world-fishing-827.proj_ocean_ghg.vessel_info_v20260714`
     WHERE
       vessel_class IN (
-        'bunker_or_tanker', 'tanker.chemical_oil', 'tanker.liquefied_gas',
-        'tanker.other')
+        'tanker.oil')
   ),
   -- Get information for each voyage (id: trip), including departure/arrival ports, countries, dates, etc
   -- Only get trips that start in India or Korea, and end in USA
@@ -21,7 +20,7 @@ WITH
       *,
       DATE(departure_timestamp) departure_date,
       DATE(arrival_timestamp) arrival_date
-    FROM `world-fishing-827.proj_ocean_ghg.voyage_info_v20250701`
+    FROM `world-fishing-827.proj_ocean_ghg.voyage_info_v20260714`
     -- WHERE from_country_iso3 IN ('IND', 'KOR') AND to_country_iso3 IN ('USA')
     WHERE from_country_iso3!= 'USA' AND to_country_iso3 = 'USA'
   ),
@@ -29,7 +28,7 @@ WITH
   voyage_level_emissions AS (
     SELECT
       *
-    FROM `world-fishing-827.proj_ocean_ghg.trip_level_emissions_v20250701`
+    FROM `world-fishing-827.proj_ocean_ghg.trip_level_emissions_v20260714`
   ),
   -- Get California spatial boundary polygon from  from public data
   -- Polygon includes land and state waters, so will cover all ports in California
